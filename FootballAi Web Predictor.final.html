@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FootballAi Web Predictor (자동 재학습 + 동기화)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 기본 스타일 */
+        body {
+            font-family: 'Inter', 'Pretendard', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+            font-weight: 700;
+        }
+        
+        h2 {
+            color: #333;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+            font-weight: 600;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            color: #555;
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+        
+        /* 버튼 스타일 */
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        /* 재학습 패널 */
+        .retraining-sync-panel {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+            border: 3px solid #fbbf24;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .retraining-sync-panel h3 {
+            margin-top: 0;
+            color: #92400e;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.2em;
+        }
+        
+        /* 버튼 그리드 */
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 15px 0;
+        }
+        
+        @media (max-width: 640px) {
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* 버튼 타입 */
+        .btn-retrain {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-retrain:hover {
+            background: #dc2626;
+        }
+        
+        .btn-sync-api {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-sync-api:hover {
+            background: #2563eb;
+        }
+        
+        .btn-download {
+            background: #8b5cf6;
+            color: white;
+        }
+        
+        .btn-download:hover {
+            background: #7c3aed;
+        }
+        
+        .btn-upload {
+            background: #ec4899;
+            color: white;
+        }
+        
+        .btn-upload:hover {
+            background: #db2777;
+        }
+        
+        /* 로그 박스 */
+        .training-sync-log {
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #fbbf24;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 180px;
+            overflow-y: auto;
+            margin-top: 10px;
+            background-color: #fffbeb;
+        }
+        
+        .training-sync-log div {
+            margin: 4px 0;
+            padding: 2px 4px;
+        }
+        
+        .log-success { color: #059669; font-weight: bold; }
+        .log-error { color: #dc2626; font-weight: bold; }
+        .log-info { color: #0284c7; }
+        .log-warning { color: #b45309; font-weight: bold; }
+        
+        /* 모드 박스 */
+        .model-status {
+            background: #f0f9ff;
+            border: 2px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .model-status h4 {
+            margin-top: 0;
+            color: #0369a1;
+            font-weight: 700;
+        }
+        
+        .model-status p {
+            margin: 5px 0;
+            color: #064e3b;
+            font-size: 14px;
+        }
+        
+        /* 탭 스타일 */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #666;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-bottom: -2px;
+        }
+        
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* 입력 필드 */
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            margin: 5px 0 15px 0;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        /* 정보 박스 */
+        .info-box {
+            background: #dbeafe;
+            border-left: 4px solid #0284c7;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            color: #064e3b;
+        }
+        
+        .success-box {
+            background: #dcfce7;
+            border-left: 4px solid #16a34a;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            color: #3d5641;
+        }
+        
+        .warning-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            color: #78350f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <div>
+            <h1>⚽ FootballAi Web Predictor</h1>
+            <p style="color: #666; margin-bottom: 20px; font-size: 14px;">
+                🤖 자동 재학습 + 로컬스토리지 동기화 (api-1.html과 양방향 데이터 공유)
+            </p>
+        </div>
+
+        <!-- 🧠 자동 재학습 + 동기화 패널 (NEW) -->
+        <section class="retraining-sync-panel">
+            <h3>🤖 자동 재학습 + 동기화 시스템</h3>
+            
+            <p style="color: #92400e; font-size: 13px; margin: 10px 0;">
+                ✅ 단계별 흐름: 학습 데이터 업로드 → 자동 재학습 → 패턴 분석 → 서버 동기화 → api-1.html 자동 업데이트
+            </p>
+            
+            <div class="button-grid">
+                <button id="btn-trigger-retraining" class="btn-retrain">
+                    🧠 자동 재학습 시작
+                </button>
+                <button id="btn-sync-to-api" class="btn-sync-api">
+                    📤 api-1.html로 동기화
+                </button>
+            </div>
+            
+            <div class="button-grid">
+                <button id="btn-download-training-json" class="btn-download">
+                    📥 학습 데이터 다운로드
+                </button>
+                <button id="btn-upload-training-json" class="btn-upload">
+                    📤 학습 데이터 업로드
+                </button>
+            </div>
+            
+            <div class="training-sync-log">
+                <div style="color: #92400e; font-weight: bold; margin-bottom: 8px;">📊 재학습 & 동기화 로그</div>
+                <div id="training-sync-log-content">상태: 준비 대기 중</div>
+            </div>
+        </section>
+
+        <!-- 모델 상태 -->
+        <div class="model-status">
+            <h4>🤖 모델 상태</h4>
+            <p>✅ 모델이 준비되었습니다</p>
+            <p>📊 학습 데이터: <span id="training-data-count">0</span>개 항목</p>
+            <p>🔄 마지막 재학습: <span id="last-retrain-time">없음</span></p>
+        </div>
+
+        <!-- 탭 메뉴 -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('prediction-tab')">
+                🔮 예측 분석
+            </button>
+            <button class="tab-btn" onclick="switchTab('pattern-tab')">
+                📊 패턴 분석
+            </button>
+            <button class="tab-btn" onclick="switchTab('settings-tab')">
+                ⚙️ 설정
+            </button>
+        </div>
+
+        <!-- 탭 1: 예측 분석 -->
+        <div id="prediction-tab" class="tab-content active">
+            <h2>🔮 경기 예측 분석</h2>
+            
+            <div class="info-box">
+                📌 학습된 패턴을 기반으로 경기 결과를 예측합니다.
+            </div>
+            
+            <label>홈 팀 이름</label>
+            <input type="text" id="home-team" placeholder="예: Manchester City">
+            
+            <label>원정 팀 이름</label>
+            <input type="text" id="away-team" placeholder="예: Liverpool">
+            
+            <label>리그</label>
+            <select id="league">
+                <option value="">선택하세요...</option>
+                <option value="premier-league">Premier League</option>
+                <option value="champions-league">UEFA Champions League</option>
+                <option value="la-liga">La Liga</option>
+                <option value="serie-a">Serie A</option>
+                <option value="ligue-1">Ligue 1</option>
+            </select>
+            
+            <button class="btn-sync-api" style="width: 100%;">
+                🔮 예측 분석 실행
+            </button>
+            
+            <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                <h3>📈 예측 결과</h3>
+                <p style="color: #666; text-align: center; padding: 30px;">
+                    데이터를 입력하고 분석 버튼을 클릭하면 결과가 표시됩니다.
+                </p>
+            </div>
+        </div>
+
+        <!-- 탭 2: 패턴 분석 -->
+        <div id="pattern-tab" class="tab-content">
+            <h2>📊 패턴 분석</h2>
+            
+            <div class="info-box">
+                📌 학습된 미적중 패턴과 성공 패턴을 분석합니다.
+            </div>
+            
+            <h3>🚨 미적중 위험 패턴</h3>
+            <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <p id="warning-patterns" style="color: #7f1d1d;">로드 중...</p>
+            </div>
+            
+            <h3>✅ 성공 패턴</h3>
+            <div style="background: #dcfce7; padding: 15px; border-radius: 8px;">
+                <p id="success-patterns" style="color: #14532d;">로드 중...</p>
+            </div>
+        </div>
+
+        <!-- 탭 3: 설정 -->
+        <div id="settings-tab" class="tab-content">
+            <h2>⚙️ 설정</h2>
+            
+            <div class="info-box">
+                📌 시스템 설정 및 고급 옵션입니다.
+            </div>
+            
+            <h3>🔗 서버 설정</h3>
+            <label>API 서버 URL</label>
+            <input type="text" id="server-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+            
+            <h3>🔄 동기화 설정</h3>
+            <label>
+                <input type="checkbox" id="auto-sync-checkbox" style="width: auto; margin-right: 10px;">
+                자동 동기화 활성화 (5분마다)
+            </label>
+            
+            <h3>💾 데이터 관리</h3>
+            <button class="btn-upload" style="width: 100%;">
+                🗑️ 모든 로컬 데이터 삭제
+            </button>
+            
+            <div class="warning-box">
+                ⚠️ 주의: 모든 로컬 데이터를 삭제하면 복구할 수 없습니다.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ✅ 올바른 스크립트 로드 순서 -->
+    
+    <!-- 1️⃣ 외부 라이브러리 -->
+    <script src="https://unpkg.com/javascript-lp-solver@0.4.24/prod/solver.js"></script>
+    
+    <!-- 2️⃣ HTML 파싱 (필수 추가!) -->
+    <script src="./Realdataparserutil_v2.js"></script>
+    
+    <!-- 3️⃣ 서버 연결 -->
+    <script src="./DataParserUtil.js"></script>
+    
+    <!-- 4️⃣ 패턴 분석 -->
+    <script src="./PatternAnalyzer.js"></script>
+    <script src="./SuccessAnalyzer.js"></script>
+    
+    <!-- 5️⃣ 퍼지 회귀 (필수 추가!) -->
+    <script src="./fuzzy_regression_fix.js"></script>
+    
+    <!-- 6️⃣ 기본 앱 로직 -->
+    <script src="./app_logic.js"></script>
+    
+    <!-- 7️⃣ 동기화 (위치 변경!) -->
+    <script src="./LocalStorageSyncBridge.js"></script>
+    
+    <!-- 8️⃣ 통합 워크플로우 (파일명 수정!) -->
+    <script src="./App_logic_integration.js"></script>
+    
+    <!-- 9️⃣ 자동 재학습 + 동기화 (파일명 수정!) -->
+    <script src="./App_logic_autopredict_allleagues_v2_sync.js"></script>
+
+    <!-- 자동 재학습 & 동기화 UI 이벤트 핸들러 (NEW) -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // ========== 탭 전환 함수 ==========
+        window.switchTab = function(tabName) {
+            // 모든 탭 숨기기
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 모든 탭 버튼 비활성화
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 선택된 탭 표시
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        };
+        
+        // ========== 재학습 완료 후 자동 동기화 함수 ==========
+        
+        async function onRetrainingComplete() {
+            logTrainingSync('🤖 재학습 완료! - 동기화 시작...', 'info');
+            
+            try {
+                // 1. 현재 데이터를 로컬스토리지에 저장
+                const trainingData = {
+                    patternAnalyzerDB_v4: JSON.parse(localStorage.getItem('patternAnalyzerDB_v4') || '{}'),
+                    successAnalyzerDB_v1: JSON.parse(localStorage.getItem('successAnalyzerDB_v1') || '{}'),
+                    modelVersion: 'retrained-' + new Date().toISOString(),
+                    timestamp: new Date().toISOString()
+                };
+                
+                // 2. localStorage에 저장
+                Object.keys(trainingData).forEach(key => {
+                    localStorage.setItem(key, typeof trainingData[key] === 'string' 
+                        ? trainingData[key] 
+                        : JSON.stringify(trainingData[key]));
+                });
+                
+                logTrainingSync('💾 로컬스토리지 저장 완료', 'success');
+                
+                // 3. 서버에 동기화
+                const syncResult = await localStorageSyncBridge.syncToServer();
+                
+                if (syncResult.success) {
+                    logTrainingSync(`✅ 서버 동기화 완료: ${syncResult.time}`, 'success');
+                    updateModelStatus();
+                } else {
+                    logTrainingSync(`⚠️ 서버 동기화 부분 실패: ${syncResult.error}`, 'warning');
+                }
+            } catch (err) {
+                logTrainingSync(`❌ 동기화 오류: ${err.message}`, 'error');
+            }
+        }
+        
+        // ========== UI 버튼 이벤트 ==========
+        
+        // 1. 자동 재학습 버튼
+        document.getElementById('btn-trigger-retraining').addEventListener('click', async function() {
+            logTrainingSync('🧠 자동 재학습 시작...', 'info');
+            this.disabled = true;
+            
+            try {
+                // 기존 재학습 함수 호출 (있으면)
+                // await predictAllLeagues();
+                
+                // 재학습 완료 후 동기화
+                await onRetrainingComplete();
+                
+                this.style.background = '#22c55e';
+                this.textContent = '✅ 재학습 완료!';
+                
+                setTimeout(() => {
+                    this.disabled = false;
+                    this.style.background = '#ef4444';
+                    this.textContent = '🧠 자동 재학습 시작';
+                }, 2000);
+            } catch (err) {
+                logTrainingSync(`❌ 재학습 오류: ${err.message}`, 'error');
+                this.disabled = false;
+            }
+        });
+        
+        // 2. API로 동기화 버튼
+        document.getElementById('btn-sync-to-api').addEventListener('click', async function() {
+            logTrainingSync('📤 api-1.html로 동기화 중...', 'info');
+            this.disabled = true;
+            
+            const result = await localStorageSyncBridge.syncToServer();
+            if (result.success) {
+                logTrainingSync(`✅ 동기화 완료: ${result.time}`, 'success');
+            } else {
+                logTrainingSync(`❌ 동기화 실패: ${result.error}`, 'error');
+            }
+            
+            this.disabled = false;
+        });
+        
+        // 3. JSON 다운로드
+        document.getElementById('btn-download-training-json').addEventListener('click', function() {
+            const result = localStorageSyncBridge.downloadAsJSON();
+            if (result.success) {
+                logTrainingSync(`✅ 파일 다운로드: ${result.filename}`, 'success');
+            } else {
+                logTrainingSync(`❌ 다운로드 실패: ${result.error}`, 'error');
+            }
+        });
+        
+        // 4. JSON 업로드
+        document.getElementById('btn-upload-training-json').addEventListener('click', function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    logTrainingSync(`🔄 파일 업로드 중: ${file.name}`, 'info');
+                    try {
+                        const result = await localStorageSyncBridge.uploadFromJSON(file);
+                        if (result.success) {
+                            logTrainingSync(`✅ 업로드 완료: ${result.savedCount}개 데이터 로드됨`, 'success');
+                            updateModelStatus();
+                        } else {
+                            logTrainingSync(`❌ 업로드 실패: ${result.error}`, 'error');
+                        }
+                    } catch (err) {
+                        logTrainingSync(`❌ 오류: ${err.error}`, 'error');
+                    }
+                }
+            };
+            input.click();
+        });
+        
+        // ========== 헬퍼 함수 ==========
+        
+        function logTrainingSync(message, type = 'info') {
+            const logDiv = document.getElementById('training-sync-log-content');
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            
+            const newLine = document.createElement('div');
+            newLine.className = `log-${type}`;
+            newLine.style.marginTop = '4px';
+            newLine.textContent = `[${timestamp}] ${message}`;
+            
+            logDiv.appendChild(newLine);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            
+            // 최대 50개 로그만 유지
+            const logs = logDiv.querySelectorAll('div');
+            if (logs.length > 50) {
+                logs[0].remove();
+            }
+        }
+        
+        function updateModelStatus() {
+            try {
+                const patternDB = JSON.parse(localStorage.getItem('patternAnalyzerDB_v4') || '{}');
+                const successDB = JSON.parse(localStorage.getItem('successAnalyzerDB_v1') || '{}');
+                
+                const patternCount = Object.keys(patternDB).length;
+                const successCount = Object.keys(successDB).length;
+                const totalCount = patternCount + successCount;
+                
+                document.getElementById('training-data-count').textContent = totalCount;
+                document.getElementById('last-retrain-time').textContent = new Date().toLocaleTimeString('ko-KR');
+            } catch (err) {
+                console.error('상태 업데이트 실패:', err);
+            }
+        }
+        
+        function loadPatterns() {
+            try {
+                const patternDB = JSON.parse(localStorage.getItem('patternAnalyzerDB_v4') || '{}');
+                const successDB = JSON.parse(localStorage.getItem('successAnalyzerDB_v1') || '{}');
+                
+                const warningHtml = Object.keys(patternDB).length > 0 
+                    ? Object.entries(patternDB).slice(0, 5).map(([name, data]) => 
+                        `<div>• ${name}: ${data.count || 0}회</div>`).join('')
+                    : '<div>아직 미적중 패턴이 없습니다.</div>';
+                
+                const successHtml = Object.keys(successDB).length > 0
+                    ? Object.entries(successDB).slice(0, 5).map(([name, data]) =>
+                        `<div>• ${name}: ${data.count || 0}회</div>`).join('')
+                    : '<div>아직 성공 패턴이 없습니다.</div>';
+                
+                document.getElementById('warning-patterns').innerHTML = warningHtml;
+                document.getElementById('success-patterns').innerHTML = successHtml;
+            } catch (err) {
+                console.error('패턴 로드 실패:', err);
+            }
+        }
+        
+        // ========== 초기화 ==========
+        
+        const status = localStorageSyncBridge.getStatus();
+        logTrainingSync(`📊 시스템 초기화: ${status.dataCount}개 항목 감지됨`, 'info');
+        
+        updateModelStatus();
+        loadPatterns();
+        
+        console.log('✅ FootballAi Web Predictor 초기화 완료');
+    });
+    </script>
+
+</body>
+</html>
