@@ -413,8 +413,16 @@ async function fetchAndFillOdds(leagueName, homeTeamName, awayTeamName) {
 // [Phase 5] 애플리케이션 초기화 (api-sports.io 기준으로 변경)
 async function initApp() {
     showLoadingOverlay(true, "주요 리그 목록 로드 중...");
-    
+
     const leagueSelect = document.getElementById('league-select');
+
+    // ✅ [신규] 요소가 없으면 조기 리턴
+    if (!leagueSelect) {
+        console.warn('[initApp] league-select 요소가 없어 초기화를 건너뜁니다.');
+        showLoadingOverlay(false);
+        return;
+    }
+
     leagueSelect.innerHTML = '<option value="" disabled selected>리그 선택</option>';
     
     // ★★★ [수정] 주요 리그 ID (api-sports.io 기준) ★★★
@@ -555,6 +563,16 @@ async function initApp() {
 
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ✅ [신규] 필수 요소 체크 - 없으면 조기 리턴
+    const requiredElements = ['league-select', 'results-body', 'summary-grid'];
+    const missingElements = requiredElements.filter(id => !document.getElementById(id));
+
+    if (missingElements.length > 0) {
+        console.info('[app_logic.js] 일부 필수 요소가 없어 초기화를 건너뜁니다:', missingElements);
+        console.info('[app_logic.js] 이 페이지는 app_logic.js의 전체 기능을 사용하지 않는 것으로 보입니다.');
+        return; // 조기 리턴
+    }
+
     // --- Element Selectors ---
     const leagueSelect = document.getElementById('league-select');
     const homeTeamSelect = document.getElementById('home-team-select');
