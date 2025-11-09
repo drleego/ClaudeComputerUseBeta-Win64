@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>축구 경기 분석기 v8.5 (API 연동)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* (기존 스타일 유지) */
+        /* 기본 폰트 설정 */
+        body {
+            font-family: 'Inter', 'Pretendard', sans-serif;
+            background-color: #f4f7f6; /* Slightly lighter gray */
+        }
+        /* 탭 스타일 */
+        .tab-link {
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            padding: 0.5rem 1rem; /* Adjust padding */
+            margin-bottom: -1px; /* Overlap border */
+            cursor: pointer;
+        }
+        .tab-link.active {
+            border-bottom-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        .tab-content {
+            display: none;
+            padding-top: 1.5rem; /* Add padding above content */
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* 폼 아이콘 스타일 */
+        .form-icon {
+            display: inline-block;
+            width: 1.25rem; /* 20px */
+            height: 1.25rem; /* 20px */
+            line-height: 1.25rem; /* 20px */
+            text-align: center;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 0.75em; /* Smaller font size */
+            color: white;
+            margin: 0 1px;
+            vertical-align: middle; /* Align icons vertically */
+        }
+        .W { background-color: #2ecc71; } /* Emerald */
+        .D { background-color: #f1c40f; } /* Sunflower */
+        .L { background-color: #e74c3c; } /* Alizarin */
+        .N { background-color: #95a5a6; } /* Concrete */
+        /* 예측 결과 하이라이트 */
+        .correct-prediction {
+            background-color: #d1fae5 !important; /* green-100强制 */
+            color: #065f46 !important; /* green-800强制 */
+            font-weight: 600;
+        }
+        .incorrect-prediction {
+            background-color: #fee2e2 !important; /* red-100强制 */
+            color: #991b1b !important; /* red-800强制 */
+            opacity: 0.8; /* Slightly faded */
+        }
+        .second-lowest-osl {
+            background-color: #e0f2fe !important; /* light-blue-100强制 */
+            font-weight: bold;
+        }
+        /* PPG 트렌드 */
+        .ppg-trend { font-size: 0.9em; margin-left: 4px; }
+        .ppg-up { color: #27ae60; } /* Nephritis */
+        .ppg-down { color: #c0392b; } /* Pomegranate */
+        /* 모달 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.6); /* Darker overlay */
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            margin: 10% auto; /* Adjusted margin */
+            padding: 2rem;
+            border-radius: 0.5rem; /* 8px */
+            max-width: 400px; /* Smaller modal */
+            width: 90%;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        .modal-close {
+            position: absolute;
+            top: 0.75rem; /* 12px */
+            right: 1rem; /* 16px */
+            font-size: 1.75rem; /* Larger close icon */
+            font-weight: bold;
+            color: #9ca3af; /* gray-400 */
+            cursor: pointer;
+            line-height: 1;
+        }
+        .modal-close:hover {
+            color: #1f2937; /* gray-800 */
+        }
+        /* 메시지 박스 스타일 */
+        #message-box, #backtest-message-box { /* Added backtest-message-box */
+            display: none;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.375rem; /* 6px */
+            font-weight: 500;
+            border-width: 1px;
+            border-style: solid;
+        }
+        #message-box.error, #backtest-message-box.error { background-color: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+        #message-box.warning, #backtest-message-box.warning { background-color: #fef3c7; color: #b45309; border-color: #fcd34d; }
+        #message-box.success, #backtest-message-box.success { background-color: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+        #message-box.info, #backtest-message-box.info { background-color: #dbeafe; color: #1e40af; border-color: #93c5fd; } /* Added info style */
+        /* 반응형 테이블 스타일 (모바일용) */
+        @media screen and (max-width: 768px) {
+            .results-container table thead {
+                display: none;
+            }
+            .results-container table tr {
+                display: block;
+                margin-bottom: 1rem; /* Increased spacing */
+                border: 1px solid #e5e7eb; /* gray-200 */
+                border-radius: 0.375rem; /* 6px */
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                background-color: white; /* Ensure background */
+            }
+            .results-container table td {
+                display: block;
+                text-align: right;
+                padding-left: 55%; /* More space for label */
+                position: relative;
+                border-bottom: 1px solid #f3f4f6; /* gray-100 */
+                padding-top: 0.75rem; /* 12px */
+                padding-bottom: 0.75rem; /* 12px */
+            }
+            .results-container table td:last-child {
+                border-bottom: 0;
+            }
+            .results-container table td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0.75rem; /* 12px */
+                width: 45%;
+                padding-right: 0.75rem; /* 12px */
+                text-align: left;
+                font-weight: 600; /* Bolder label */
+                color: #4b5563; /* gray-600 */
+                font-size: 0.8em; /* Smaller label */
+            }
+            /* Adjust first cell (관리) on mobile */
+            .results-container table td[data-label="관리"] {
+                 padding-left: 0.75rem; /* Reset padding for first cell */
+                 text-align: left;
+            }
+             .results-container table td[data-label="관리"]::before {
+                 display: none; /* Hide label for first cell */
+            }
+            /* --- 수정 ---: 시너지 테이블 모바일 뷰 */
+            #accuracy-analysis-container table thead {
+                display: none;
+            }
+            #accuracy-analysis-container table tr {
+                display: block;
+                margin-bottom: 1rem;
+                border: 1px solid #e5e7eb;
+                border-radius: 0.375rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                background-color: white;
+            }
+            #accuracy-analysis-container table td {
+                display: block;
+                text-align: right;
+                padding-left: 40%; /* Adjust padding */
+                position: relative;
+                border-bottom: 1px solid #f3f4f6;
+                padding-top: 0.75rem;
+                padding-bottom: 0.75rem;
+            }
+            #accuracy-analysis-container table td:first-child {
+                font-weight: bold;
+                background-color: #f9fafb; /* gray-50 */
+                padding-left: 0.75rem;
+                text-align: left;
+            }
+            #accuracy-analysis-container table td:first-child::before {
+                display: none;
+            }
+            #accuracy-analysis-container table td::before {
+                content: attr(data-label); /* JS에서 data-label을 추가해야 함 */
+                position: absolute;
+                left: 0.75rem;
+                width: 35%; /* Adjust width */
+                padding-right: 0.75rem;
+                text-align: left;
+                font-weight: 600;
+                color: #4b5563;
+                font-size: 0.8em;
+            }
+        }
+        /* 시너지 테이블 스타일 */
+        .diagonal-cell {
+            background-color: #f3f4f6; /* gray-100 */
+            font-weight: bold;
+            color: #1f2937; /* gray-800 */
+        }
+        .high-synergy {
+            background-color: #d1fae5; /* green-100 */
+            color: #065f46; /* green-800 */
+            font-weight: bold;
+        }
+        .low-synergy {
+            background-color: #fee2e2; /* red-100 */
+            color: #991b1b; /* red-800 */
+        }
+        /* 버튼 기본 스타일 */
+        .primary-btn { @apply bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-md hover:bg-blue-700 transition duration-300; }
+        .secondary-btn { @apply bg-gray-500 text-white py-2 px-4 rounded-md font-semibold shadow-md hover:bg-gray-600 transition duration-300; }
+        .success-btn { @apply bg-green-600 text-white py-2 px-4 rounded-md shadow hover:bg-green-700 transition duration-300; }
+        .warning-btn { @apply bg-yellow-500 text-white py-2 px-6 rounded-md shadow hover:bg-yellow-600 transition font-semibold; }
+        .danger-btn { @apply bg-red-600 text-white py-2 px-6 rounded-md shadow hover:bg-red-700 transition font-semibold; }
+        .purple-btn { @apply bg-purple-600 text-white py-2 px-4 rounded-md shadow hover:bg-purple-700 transition; }
+        .indigo-btn { @apply bg-indigo-500 text-white py-2 px-4 rounded-md shadow hover:bg-indigo-600 transition text-sm; }
+        /* ========== 동기화 패널 스타일 (NEW) ========== */
+        .sync-control-panel {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 20px; margin: 20px 0; border-radius: 12px;
+            border: 2px solid #0ea5e9; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .sync-control-panel h3 { margin-top: 0; color: #0369a1; font-weight: 700; margin-bottom: 15px; }
+        .sync-button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        @media (max-width: 768px) { .sync-button-grid { grid-template-columns: 1fr; } }
+        .sync-button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; transition: all 0.3s ease; font-size: 14px; }
+        .sync-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); }
+        .sync-button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-download { background: #10b981; } .btn-download:hover { background: #059669; }
+        .btn-upload { background: #f59e0b; } .btn-upload:hover { background: #d97706; }
+        .btn-sync { background: #0ea5e9; } .btn-sync:hover { background: #0284c7; }
+        .btn-auto-sync { background: #8b5cf6; } .btn-auto-sync:hover { background: #7c3aed; }
+        .sync-status-log { padding: 12px; background: white; border-radius: 6px; border: 1px solid #0ea5e9; font-family: 'Courier New', monospace; font-size: 12px; max-height: 150px; overflow-y: auto; color: #0369a1; }
+        .sync-status-log div { margin-top: 4px; padding: 2px 0; }
+        .sync-log-success { color: #059669; } .sync-log-error { color: #dc2626; } .sync-log-info { color: #0284c7; } .sync-log-warning { color: #b45309; }
+        /* 테이블 셀 내 버튼 스타일 */
+        .delete-row-btn, .enter-result-btn {
+            padding: 4px 8px;
+            font-size: 0.8em;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 5px;
+            border: none;
+            color: white;
+            transition: background-color 0.2s ease;
+        }
+        .delete-row-btn { background-color: #e74c3c; /* Alizarin */ }
+        .delete-row-btn:hover { background-color: #c0392b; /* Pomegranate */ }
+        .enter-result-btn { background-color: #9b59b6; /* Amethyst */ }
+        .enter-result-btn:hover { background-color: #8e44ad; /* Wisteria */ }
+        /* 종합 예측 셀 이유 텍스트 */
+        .consensus-reasoning {
+            display: block;
+            font-size: 0.75em; /* Smaller font */
+            color: #6b7280; /* gray-500 */
+            font-weight: 400;
+            margin-top: 4px;
+            line-height: 1.2;
+        }
+        /* 스피너 스타일 */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+            display: inline-block; /* Changed from none */
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* [신규] 로딩 오버레이 스타일 */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+            transition: opacity 0.5s ease;
+            opacity: 1;
+        }
+        #main-content {
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div id="loading-overlay">
+        <div class="spinner w-12 h-12 !border-4 !border-l-blue-600"></div>
+        <p class="text-lg font-semibold text-blue-600 mt-4">Football Data API로부터 리그 데이터를 로드하는 중...</p>
+        <p class="text-sm text-gray-500 mt-2">API 응답 시간에 따라 시간이 소요될 수 있습니다. (TIER_ONE 리그만 로드)</p>
+    </div>
+
+    <div id="main-content" class="container mx-auto max-w-screen-2xl bg-white p-6 rounded-lg shadow-lg">
+
+        <header class="mb-6 pb-4 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-900">축구 경기 분석기 (v8.5 - API 연동)</h1>
+            <p class="text-gray-600">데이터 기반 경기 예측 및 분석 도구</p>
+        </header>
+
+        <div id="message-box"></div>
+
+        <!-- 🔄 로컬스토리지 동기화 컨트롤 (NEW) -->
+        <section class="sync-control-panel">
+            <h3>🔄 로컬스토리지 동기화 (데이터 자동 공유)</h3>
+            
+            <div class="sync-button-grid">
+                <button id="btn-download-json" class="sync-button btn-download">
+                    📥 학습 데이터 다운로드 (.JSON)
+                </button>
+                <button id="btn-upload-json" class="sync-button btn-upload">
+                    📤 학습 데이터 업로드 (.JSON)
+                </button>
+            </div>
+            
+            <div class="sync-button-grid">
+                <button id="btn-sync-server" class="sync-button btn-sync">
+                    🔗 서버 동기화 (지금 바로)
+                </button>
+                <button id="btn-auto-sync" class="sync-button btn-auto-sync">
+                    ⏰ 자동 동기화 시작 (5분마다)
+                </button>
+            </div>
+            
+            <div class="sync-status-log">
+                <div style="color: #0369a1; font-weight: bold;">📊 동기화 상태</div>
+                <div id="sync-status">시스템 준비 완료</div>
+            </div>
+        </section>
+
+        <section id="input-section" class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">경기 정보 입력</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label for="league-select" class="block text-sm font-medium text-gray-700 mb-1">리그 선택 <span class="text-xs text-red-600">(K1, K2 포함)</span></label>
+                        <select id="league-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                             <option value="" disabled selected>API에서 리그 로딩 중...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="home-team-select" class="block text-sm font-medium text-gray-700 mb-1">홈 팀</label>
+                        <select id="home-team-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                             <option value="" disabled selected>팀 로딩 대기</option>
+                        </select>
+                        <input type="text" id="home-team-input" placeholder="홈 팀 이름 직접 입력" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 hidden bg-white">
+                    </div>
+                    <div>
+                        <label for="away-team-select" class="block text-sm font-medium text-gray-700 mb-1">원정 팀</label>
+                        <select id="away-team-select" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                             <option value="" disabled selected>팀 로딩 대기</option>
+                        </select>
+                        <input type="text" id="away-team-input" placeholder="원정 팀 이름 직접 입력" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 hidden bg-white">
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="home-ppg" class="block text-sm font-medium text-gray-700 mb-1">홈팀 PPG</label>
+                            <input type="number" id="home-ppg" step="0.01" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 1.50">
+                        </div>
+                        <div>
+                            <label for="away-ppg" class="block text-sm font-medium text-gray-700 mb-1">원정팀 PPG</label>
+                            <input type="number" id="away-ppg" step="0.01" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 1.20">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="home-elo" class="block text-sm font-medium text-gray-700 mb-1">홈팀 ELO</label>
+                            <input type="number" id="home-elo" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 1800">
+                        </div>
+                        <div>
+                            <label for="away-elo" class="block text-sm font-medium text-gray-700 mb-1">원정팀 ELO</label>
+                            <input type="number" id="away-elo" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 1750">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="home-form" class="block text-sm font-medium text-gray-700 mb-1">홈팀 최근 폼 (5)</label>
+                            <input type="text" id="home-form" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: WDWLD">
+                        </div>
+                        <div>
+                            <label for="away-form" class="block text-sm font-medium text-gray-700 mb-1">원정팀 최근 폼 (5)</label>
+                            <input type="text" id="away-form" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: LLDWW">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label for="home-odds" class="block text-sm font-medium text-gray-700 mb-1">홈 승</label>
+                            <input type="number" id="home-odds" step="0.01" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 2.50">
+                        </div>
+                        <div>
+                            <label for="draw-odds" class="block text-sm font-medium text-gray-700 mb-1">무승부</label>
+                            <input type="number" id="draw-odds" step="0.01" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 3.30">
+                        </div>
+                        <div>
+                            <label for="away-odds" class="block text-sm font-medium text-gray-700 mb-1">원정 승</label>
+                            <input type="number" id="away-odds" step="0.01" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" placeholder="예: 2.80">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 pt-6">
+                        <button id="add-result" class="primary-btn bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-md hover:bg-blue-700 transition duration-300">
+                            분석 추가
+                        </button>
+                        <button id="clear-inputs" class="secondary-btn bg-gray-500 text-white py-2 px-4 rounded-md font-semibold shadow-md hover:bg-gray-600 transition duration-300">
+                            배당률 초기화
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="team-brier-score-display" class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md text-blue-800 text-sm">
+                <p>팀을 선택하면 최근 맞대결 또는 각 팀의 최근 경기 브라이어 점수를 표시합니다.</p>
+            </div>
+        </section>
+
+        <section id="summary-section" class="mb-6">
+            <div id="summary-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                </div>
+        </section>
+
+        <div class="tabs-container mb-4 border-b border-gray-200 flex flex-wrap">
+            <button class="tab-link active" onclick="openTab(event, 'main-analysis')">종합 분석</button>
+            <button class="tab-link" onclick="openTab(event, 'auto-analysis')">자동 분석 & 모델 성능</button>
+            <button class="tab-link" onclick="openTab(event, 'recommended-picks')">추천 예측</button>
+        </div>
+
+        <div class="tab-content-container">
+
+            <div id="main-analysis" class="tab-content active">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h2 class="text-xl font-semibold text-gray-700">분석 결과</h2>
+                    <div>
+                        <button id="sort-by-score-btn" class="indigo-btn">
+                            핵심 점수 정렬
+                        </button>
+                        <button id="save-results-btn" class="success-btn ml-2">
+                            리포트 생성 (선택/전체)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="results-container overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="min-w-full w-full bg-white text-xs text-left text-gray-500">
+                        <thead class="bg-gray-100 text-xs text-gray-700 uppercase">
+                            <tr>
+                                <th scope="col" class="py-3 px-4 w-20">
+                                    <label for="select-all-checkbox" class="flex items-center space-x-2">
+                                        <input type="checkbox" id="select-all-checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span>관리</span>
+                                    </label>
+                                </th>
+                                <th scope="col" class="py-3 px-4 min-w-[180px]">경기 (ELO)</th>
+                                <th scope="col" class="py-3 px-4 min-w-[120px]">최근 폼</th>
+                                <th scope="col" class="py-3 px-4">이변 지수</th>
+                                <th scope="col" class="py-3 px-4">OSL 핵심점수</th>
+                                <th scope="col" class="py-3 px-4">BT 모델</th>
+                                <th scope="col" class="py-3 px-4">회귀 모델</th>
+                                <th scope="col" class="py-3 px-4">퍼지 회귀</th>
+                                <th scope="col" class="py-3 px-4 min-w-[150px]">종합 예측</th>
+                                <th scope="col" class="py-3 px-4 min-w-[110px]">핸디캡 예측</th>
+                                <th scope="col" class="py-3 px-4">HPL xG-푸아송</th>
+                                <th scope="col" class="py-3 px-4">O/U 2.5 (xG)</th>
+                                <th scope="col" class="py-3 px-4">BTTS (xG)</th>
+                                <th scope="col" class="py-3 px-4">홈 OSL</th>
+                                <th scope="col" class="py-3 px-4">무 OSL</th>
+                                <th scope="col" class="py-3 px-4">원 OSL</th>
+                                <th scope="col" class="py-3 px-4">결과</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body" class="divide-y divide-gray-200">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div id="accuracy-analysis-container" class="mt-8">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-700">모델 상호 적중률 분석 (직접 추가된 경기만)</h2>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table id="synergy-table" class="min-w-full w-full bg-white text-sm text-center">
+                            <thead class="bg-gray-100 text-xs text-gray-700 uppercase">
+                                <tr id="synergy-header-row">
+                                    </tr>
+                            </thead>
+                            <tbody id="synergy-body" class="divide-y divide-gray-200">
+                                </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-600 space-y-1">
+                        <p>* 이 표는 <strong>"기준 모델 (행)이 실제 결과를 맞혔을 때, 비교 모델 (열)도 맞혔을 확률"</strong>을 보여줍니다.</p>
+                        <p><span class="inline-block w-3 h-3 bg-green-100 border mr-1"></span>: 90% 이상 일치 (높은 시너지)</p>
+                        <p><span class="inline-block w-3 h-3 bg-red-100 border mr-1"></span>: 80% 미만 일치 (낮은 시너지)</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="auto-analysis" class="tab-content">
+			
+			<div class="my-4 p-4 bg-gray-100 rounded border">
+                <h3 class="text-lg font-semibold mb-2">🧠 미적중 패턴 학습</h3>
+                <p class="text-sm text-gray-600 mb-3">
+                    메인 테이블의 모든 경기(백테스팅+수동)를 분석하여 위험 패턴 DB를 구축합니다.<br>
+                    데이터가 많을수록 정확도가 향상됩니다. (현재 630+ 경기)
+                </p>
+                <button id="build-pattern-db-btn" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-semibold shadow-md hover:bg-blue-700">
+                    📈 패턴 DB 구축 및 업데이트 (전체 경기 학습)
+                </button>
+            </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-1 p-4 bg-gray-50 rounded-lg border border-gray-200 flex flex-col">
+                        <h2 class="text-xl font-semibold mb-4 text-gray-700">백테스팅 경기 목록</h2>
+                        <div id="backtest-message-box"></div> <div class="mb-4 flex-shrink-0">
+                            <label for="backtest-league-select" class="block text-sm font-medium text-gray-700 mb-1">리그 선택 <span class="text-xs text-red-600">(K1, K2 포함)</span></label>
+                            <div class="flex items-center space-x-2">
+                                <select id="backtest-league-select" class="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    <option value="" disabled selected>리그 선택 (API 로드 후)</option>
+                                </select>
+                                <label for="backtest-all-checkbox" class="flex items-center text-sm text-gray-700 whitespace-nowrap">
+                                    <input type="checkbox" id="backtest-all-checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-1">
+                                    전체 실행
+                                </label>
+                                <div id="backtest-spinner" class="spinner" style="display: none;"></div> </div>
+                        </div>
+
+                        <div id="fixture-list" class="text-sm space-y-2">
+                            <p style="text-align: center; color: #888;">상단에서 리그를 선택하면 경기 목록이 표시됩니다.</p>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2 space-y-6">
+                        <div id="model-performance-summary" class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <h4>🤖 HPL xG-푸아송 모델 성능</h4>
+                            <p><strong>브라이어 점수 (Brier Score):</strong> N/A (결과 입력 필요)</p>
+                            <p style="font-size: 0.85em; color: #555;">* 브라이어 점수는 예측 확률의 정확도를 나타내며, 0에 가까울수록 좋습니다. (무작위 예측 기준: ~0.67)</p>
+                        </div>
+                        <div id="fuzzy-training-status" class="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <h4>🧠 퍼지 회귀 모델 상태</h4>
+                            <p>모델을 훈련하는 중...</p>
+                        </div>
+                        <div class="flex flex-wrap gap-4">
+                            <button id="retrain-fuzzy-btn" class="purple-btn">
+                                현재 데이터로 퍼지 모델 재훈련
+                            </button>
+                            <button id="export-data-btn" class="secondary-btn">
+                                학습 데이터 다운로드 (.json)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="recommended-picks" class="tab-content">
+                <div class="flex justify-center items-center mb-6 gap-4">
+                    <button id="recommend-home-win" class="primary-btn">
+                        홈 승 추천
+                    </button>
+                    <button id="recommend-draw" class="warning-btn">
+                        무승부 추천
+                    </button>
+                    <button id="recommend-away-win" class="danger-btn">
+                        원정 승 추천
+                    </button>
+                </div>
+                <div class="results-container overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="min-w-full w-full bg-white text-xs text-left text-gray-500">
+                        <thead class="bg-gray-100 text-xs text-gray-700 uppercase">
+                            <tr>
+                                <th scope="col" class="py-3 px-4">관리</th>
+                                <th scope="col" class="py-3 px-4 min-w-[180px]">경기 (ELO)</th>
+                                <th scope="col" class="py-3 px-4 min-w-[120px]">최근 폼</th>
+                                <th scope="col" class="py-3 px-4">이변 지수</th>
+                                <th scope="col" class="py-3 px-4">OSL 핵심점수</th>
+                                <th scope="col" class="py-3 px-4">BT 모델</th>
+                                <th scope="col" "py-3 px-4">회귀 모델</th>
+                                <th scope="col" class="py-3 px-4">퍼지 회귀</th>
+                                <th scope="col" class="py-3 px-4 min-w-[150px]">종합 예측</th>
+                                <th scope="col" class="py-3 px-4 min-w-[110px]">핸디캡 예측</th>
+                                <th scope="col" class="py-3 px-4">HPL xG-푸아송</th>
+                                <th scope="col" class="py-3 px-4">O/U 2.5 (xG)</th>
+                                <th scope="col" class="py-3 px-4">BTTS (xG)</th>
+                                <th scope="col" class="py-3 px-4">홈 OSL</th>
+                                <th scope="col" class="py-3 px-4">무 OSL</th>
+                                <th scope="col" class="py-3 px-4">원 OSL</th>
+                                <th scope="col" class="py-3 px-4">결과</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recommended-picks-body" class="divide-y divide-gray-200">
+                             <tr><td colspan="17" style="text-align:center;padding:20px;">추천할 예측 유형 (홈 승/무승부/원정 승)을 선택하세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div> </div> <div id="resultModal" class="modal">
+        <div class="modal-content shadow-xl">
+            <span id="close-result-modal" class="modal-close">&times;</span>
+            <h3 class="text-xl font-semibold mb-4 text-gray-700">경기 결과 입력</h3>
+            <form id="result-form" class="space-y-4">
+                <div class="flex items-center space-x-4">
+                    <div class="flex-1">
+                        <label for="home-score" class="block text-sm font-medium text-gray-700 mb-1">홈 팀 점수</label>
+                        <input type="number" id="home-score" min="0" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" required>
+                    </div>
+                    <span class="text-gray-600 font-bold text-lg mt-6">-</span>
+                    <div class="flex-1">
+                        <label for="away-score" class="block text-sm font-medium text-gray-700 mb-1">원정 팀 점수</label>
+                        <input type="number" id="away-score" min="0" class="w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white" required>
+                    </div>
+                </div>
+                <button type="submit" class="w-full purple-btn">
+                    결과 저장
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ✅ 올바른 순서의 스크립트 로드 -->
+    
+    <!-- 1️⃣ 외부 라이브러리 (제일 먼저) -->
+    <script src="https://unpkg.com/javascript-lp-solver@0.4.24/prod/solver.js"></script>
+    
+    <!-- 2️⃣ RealDataParserUtil_v2.js (필수! 새로 추가) -->
+    <script src="./RealDataParserUtil_v2.js"></script>
+    
+    <!-- 3️⃣ 서버 연결 (DataParserUtil.js = App_logic_v4.1) -->
+    <script src="./DataParserUtil.js"></script>
+    
+    <!-- 4️⃣ 패턴 분석 (RealDataParserUtil 필요) -->
+    <script src="./PatternAnalyzer.js"></script>
+    <script src="./SuccessAnalyzer.js"></script>
+    
+    <!-- 5️⃣ 퍼지 회귀 -->
+    <script src="./fuzzy_regression_fix.js"></script>
+    
+    <!-- 6️⃣ 기본 앱 로직 -->
+    <script src="./app_logic.js"></script>
+    
+    <!-- 7️⃣ 동기화 (serverConfig 필요) -->
+    <script src="./LocalStorageSyncBridge.js"></script>
+    
+    <!-- 8️⃣ 통합 로직 -->
+    <script src="./App_logic_integration.js"></script>
+    
+    <!-- 9️⃣ 자동 예측 + 동기화 (제일 마지막) -->
+    <script src="./App_logic_autopredict_allleagues_v2_sync.js"></script>
+    
+    <!-- 초기화 코드 -->
+    <script>
+        console.log('✅ 모든 모듈 로드 완료');
+        
+        // 검증
+        console.log('1. DataParserUtil:', typeof DataParserUtil);
+        console.log('2. serverConfig:', typeof serverConfig);
+        console.log('3. patternDB:', typeof patternDB);
+        console.log('4. successDB:', typeof successDB);
+    </script>
+
+    <!-- 동기화 UI 이벤트 핸들러 (NEW) -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // ========== 동기화 UI 이벤트 ==========
+        
+        // 1. JSON 다운로드
+        const btnDownloadJson = document.getElementById('btn-download-json');
+        if (btnDownloadJson) {
+            btnDownloadJson.addEventListener('click', function() {
+                console.log('📥 JSON 다운로드 시작...');
+                logSyncStatus('🔄 데이터 다운로드 중...');
+                
+                const result = localStorageSyncBridge.downloadAsJSON();
+                if (result.success) {
+                    logSyncStatus(`✅ 파일 다운로드: ${result.filename}`, 'success');
+                } else {
+                    logSyncStatus(`❌ 다운로드 실패: ${result.error}`, 'error');
+                }
+            });
+        }
+        
+        // 2. JSON 업로드
+        const btnUploadJson = document.getElementById('btn-upload-json');
+        if (btnUploadJson) {
+            btnUploadJson.addEventListener('click', function() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = async function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        console.log('📤 JSON 업로드 시작...', file.name);
+                        logSyncStatus(`🔄 파일 업로드 중: ${file.name}`);
+                        
+                        try {
+                            const result = await localStorageSyncBridge.uploadFromJSON(file);
+                            if (result.success) {
+                                logSyncStatus(`✅ 업로드 완료: ${result.savedCount}개 데이터 로드됨`, 'success');
+                            } else {
+                                logSyncStatus(`❌ 업로드 실패: ${result.error}`, 'error');
+                            }
+                        } catch (err) {
+                            logSyncStatus(`❌ 오류: ${err.error}`, 'error');
+                        }
+                    }
+                };
+                input.click();
+            });
+        }
+        
+        // 3. 서버 동기화
+        const btnSyncServer = document.getElementById('btn-sync-server');
+        if (btnSyncServer) {
+            btnSyncServer.addEventListener('click', async function() {
+                console.log('🔗 서버 동기화 시작...');
+                logSyncStatus('🔄 서버 동기화 중...');
+                this.disabled = true;
+                
+                const result = await localStorageSyncBridge.syncToServer();
+                if (result.success) {
+                    logSyncStatus(`✅ 동기화 완료: ${result.time}`, 'success');
+                } else {
+                    logSyncStatus(`❌ 동기화 실패: ${result.error}`, 'error');
+                }
+                
+                this.disabled = false;
+            });
+        }
+        
+        // 4. 자동 동기화
+        let autoSyncEnabled = false;
+        const btnAutoSync = document.getElementById('btn-auto-sync');
+        if (btnAutoSync) {
+            btnAutoSync.addEventListener('click', function() {
+                autoSyncEnabled = !autoSyncEnabled;
+                
+                if (autoSyncEnabled) {
+                    localStorageSyncBridge.startAutoSync();
+                    localStorageSyncBridge.enableAutoSync();
+                    btnAutoSync.style.background = '#22c55e';
+                    btnAutoSync.textContent = '⏹️ 자동 동기화 중지 (5분마다 작동 중)';
+                    logSyncStatus('✅ 자동 동기화 시작됨 (5분마다)', 'success');
+                } else {
+                    localStorageSyncBridge.stopAutoSync();
+                    btnAutoSync.style.background = '#8b5cf6';
+                    btnAutoSync.textContent = '⏰ 자동 동기화 시작 (5분마다)';
+                    logSyncStatus('⏹️ 자동 동기화 중지됨', 'warning');
+                }
+            });
+        }
+        
+        // ========== 헬퍼 함수 ==========
+        
+        function logSyncStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('sync-status');
+            if (!statusDiv) return;
+            
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            
+            const newLine = document.createElement('div');
+            newLine.className = `sync-log-${type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info'}`;
+            newLine.style.marginTop = '4px';
+            newLine.textContent = `[${timestamp}] ${message}`;
+            
+            statusDiv.appendChild(newLine);
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+            
+            // 최대 50개 로그만 유지
+            const logs = statusDiv.querySelectorAll('div');
+            if (logs.length > 50) {
+                logs[0].remove();
+            }
+        }
+        
+        // 페이지 로드 시 초기화
+        if (typeof localStorageSyncBridge !== 'undefined') {
+            const status = localStorageSyncBridge.getStatus();
+            logSyncStatus(`📊 초기화: ${status.dataCount}개 항목 감지됨`, 'info');
+            console.log('✅ 동기화 UI 초기화 완료');
+        }
+    });
+    </script>
+
+</body>
+</html>
