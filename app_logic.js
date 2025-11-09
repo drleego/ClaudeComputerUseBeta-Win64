@@ -649,8 +649,26 @@ document.addEventListener('DOMContentLoaded', () => {
             trainFuzzyRegression(true);
         } catch (e) {
             console.error("Error during initial fuzzy training:", e);
-        renderBiasReport();
         }
+
+        // ✅ [신규] 페이지 로드 시 이미 입력된 결과가 5개 이상이면 자동 재훈련
+        setTimeout(() => {
+            const completedRows = Array.from(resultsBody.querySelectorAll('tr'))
+                .filter(row => row.dataset.finalResult &&
+                              row.dataset.finalResult !== 'null' &&
+                              row.dataset.finalResult.includes('-'));
+
+            if (completedRows.length >= 5 && !fuzzyCoefficients) {
+                console.log(`🔄 기존 데이터로 퍼지 모델 자동 재훈련 (${completedRows.length}개 경기 데이터)...`);
+                try {
+                    trainFuzzyRegression(false);
+                } catch (e) {
+                    console.error('❌ 자동 재훈련 실패:', e);
+                }
+            }
+        }, 500); // DOM 로드 완료 대기
+
+        renderBiasReport();
     });
 
     // --- Onload Data Hydration (Removed old hardcoded data loading) ---
@@ -1576,6 +1594,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 console.log("Fuzzy Regression Training Successful:", fuzzyCoefficients);
                 fuzzyTrainingStatus.innerHTML = `<h4>🧠 퍼지 회귀 모델 상태</h4><p style="color: green;">✓ 모델 훈련 완료 (${trainingData.length} 경기 데이터 사용). 예측이 활성화되었습니다.</p>`;
+
+                // ✅ [신규] 훈련 성공 후 기존 row들의 퍼지 예측 업데이트
+                if (!initialTraining) {
+                    updateFuzzyPredictionsForAllRows();
+                }
             } else {
                  throw new Error(`LP Solver did not find a feasible solution. The model might be infeasible.`);
             }
@@ -1584,6 +1607,75 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Fuzzy Regression Training Failed:", e);
             fuzzyTrainingStatus.innerHTML = `<h4>🧠 퍼지 회귀 모델 상태</h4><p style="color: red;">✗ 모델 훈련 실패. 예측을 사용할 수 없습니다. (${e.message})</p>`;
             fuzzyCoefficients = null;
+        }
+    };
+
+    // ✅ [신규] 훈련 후 기존 row들의 퍼지 예측 업데이트
+    const updateFuzzyPredictionsForAllRows = () => {
+        if (!fuzzyCoefficients) return;
+
+        const allRows = Array.from(resultsBody.querySelectorAll('tr'));
+        let updatedCount = 0;
+
+        allRows.forEach(row => {
+            if (row.dataset.analysis) {
+                try {
+                    const analysisData = JSON.parse(row.dataset.analysis);
+                    const { homeElo, awayElo, homePpg, awayPpg } = analysisData;
+
+                    // Get team names and upset scores
+                    const homeTeamName = (analysisData.homeTeam && typeof analysisData.homeTeam === 'object')
+                        ? analysisData.homeTeam.name
+                        : (analysisData.homeTeamName || '');
+                    const awayTeamName = (analysisData.awayTeam && typeof analysisData.awayTeam === 'object')
+                        ? analysisData.awayTeam.name
+                        : (analysisData.awayTeamName || '');
+                    const homeUpsetScore = teamUpsetStats[homeTeamName] || 0;
+                    const awayUpsetScore = teamUpsetStats[awayTeamName] || 0;
+
+                    // Calculate fuzzy prediction
+                    const eloDiff = homeElo - awayElo;
+                    const ppgDiff = homePpg - awayPpg;
+                    const upsetScoreDiff = homeUpsetScore - awayUpsetScore;
+                    const fuzzyFeatures = [1, eloDiff, ppgDiff, upsetScoreDiff];
+                    const fuzzyPrediction = predictWithFuzzyModel(fuzzyFeatures);
+
+                    // Update dataset
+                    row.dataset.fuzzyPrediction = JSON.stringify(fuzzyPrediction);
+
+                    // Generate fuzzy display
+                    let fuzzyDisplay = '훈련 필요';
+                    let fuzzyPredictionText = 'N/A';
+                    if (fuzzyPrediction.center !== 'N/A') {
+                        const center = fuzzyPrediction.center;
+                        const spread = fuzzyPrediction.spread;
+                        const lower = center - spread;
+                        const upper = center + spread;
+
+                        if (center > 1.5) fuzzyPredictionText = '홈 2+ 승';
+                        else if (center > 0.5) fuzzyPredictionText = '홈 1골 승';
+                        else if (center < -1.5) fuzzyPredictionText = '원정 2+ 승';
+                        else if (center < -0.5) fuzzyPredictionText = '원정 1골 승';
+                        else fuzzyPredictionText = '무승부';
+
+                        fuzzyDisplay = `<span style="font-weight: bold;">${fuzzyPredictionText}</span><br><span style="font-size:0.9em; color:#555;">(중심: ${center.toFixed(2)})<br>[${lower.toFixed(1)} ~ ${upper.toFixed(1)}]</span>`;
+                    }
+                    row.dataset.fuzzyPredText = fuzzyPredictionText;
+
+                    // Update UI cell
+                    const fuzzyCell = row.querySelector('td[data-label="퍼지 회귀 (골득실)"]');
+                    if (fuzzyCell) {
+                        fuzzyCell.innerHTML = fuzzyDisplay;
+                        updatedCount++;
+                    }
+                } catch (e) {
+                    console.error('❌ 퍼지 예측 업데이트 실패:', e);
+                }
+            }
+        });
+
+        if (updatedCount > 0) {
+            console.log(`✅ ${updatedCount}개 경기의 퍼지 예측 업데이트 완료`);
         }
     };
 
