@@ -2304,11 +2304,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // --- [신규] PatternAnalyzer.js 연동 Hook ---
         let warningMessage = ""; // 경고 메시지 변수 초기화
-        
+
         // PatternAnalyzer.js가 준비되었는지 확인
         if (typeof patternDB !== 'undefined' && patternDB.isReady) {
             try {
-                warningMessage = patternDB.verify(newRow.dataset); 
+                // ✅ [수정] newRow.dataset 대신 newRow (TR 요소) 전달
+                warningMessage = patternDB.verify(newRow);
             } catch (e) {
                 console.error("PatternDB 검증 중 오류:", e);
             }

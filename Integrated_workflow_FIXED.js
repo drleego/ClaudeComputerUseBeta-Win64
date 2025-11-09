@@ -686,20 +686,22 @@ function updatePatternVerification(patternDB, successDB) {
             if (cells.length >= 2) {
                 const warningCell = cells[cells.length - 2];
                 const recommendCell = cells[cells.length - 1];
-                
+
                 // 패턴 검증
                 if (patternDB && typeof patternDB.verify === 'function') {
-                    const warnings = patternDB.verify(row.dataset);
+                    // ✅ [수정] row.dataset 대신 row (TR 요소) 전달
+                    const warnings = patternDB.verify(row);
                     if (warningCell && warnings) {
                         warningCell.innerHTML = warnings;
                         warningCell.style.color = '#e74c3c';
                         updatedCount++;
                     }
                 }
-                
+
                 // 성공 신호 검증
                 if (successDB && typeof successDB.verify === 'function') {
-                    const recommendations = successDB.verify(row.dataset);
+                    // ✅ [수정] row.dataset 대신 row (TR 요소) 전달
+                    const recommendations = successDB.verify(row);
                     if (recommendCell && recommendations) {
                         recommendCell.innerHTML = recommendations;
                         recommendCell.style.color = '#27ae60';
