@@ -2421,6 +2421,26 @@ newRow.innerHTML = `
             // 헬퍼 함수 호출
             collectTrainingData(dataForTraining, actualResult);
         }
+
+        // ✅ [신규] 자동 퍼지 회귀 재훈련
+        // 경기 결과가 입력되면 자동으로 5개 단위로 재훈련
+        if (finalResult && finalResult !== 'null') {
+            const completedRows = Array.from(resultsBody.querySelectorAll('tr'))
+                .filter(row => row.dataset.finalResult &&
+                              row.dataset.finalResult !== 'null' &&
+                              row.dataset.finalResult.includes('-'));
+
+            // 5개 이상 경기 결과가 있고, 5의 배수일 때 자동 재훈련
+            if (completedRows.length >= 5 && completedRows.length % 5 === 0) {
+                console.log(`🔄 퍼지 모델 자동 재훈련 (${completedRows.length}개 경기 데이터)...`);
+                try {
+                    trainFuzzyRegression(false);
+                } catch (e) {
+                    console.error('❌ 자동 재훈련 실패:', e);
+                }
+            }
+        }
+
         updateSummary();
         calculateBrierScore(); // This also triggers updateSynergyAnalysis
     };
